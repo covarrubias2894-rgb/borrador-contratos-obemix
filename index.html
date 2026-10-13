@@ -469,6 +469,8 @@ const PRODUCTOS = [
   { id: "jicama",              nombre: "Jícama",               cat: "fruta" },
   { id: "pepino",              nombre: "Pepino",               cat: "fruta" },
   { id: "zanahoria",           nombre: "Zanahoria rallada",    cat: "fruta" },
+  { id: "pina",                nombre: "Piña",                 cat: "fruta" },
+  { id: "naranja",             nombre: "Naranja",              cat: "fruta" },
   { id: "panditas",            nombre: "Panditas",             cat: "gomitas" },
   { id: "manguitos",           nombre: "Manguitos",            cat: "gomitas" },
   { id: "aros-manzana",        nombre: "Aros de manzana",      cat: "gomitas" },
@@ -615,15 +617,15 @@ const MENSAJE_EJEMPLO = [
   "Invitados: 45 → Paquete hasta 50: $2,800",
   "",
   "*Mis 12 snacks*",
-  "Fruta: Jícama, Pepino",
+  "Fruta: Jícama, Piña",
   "Gomitas: Panditas, Aros de durazno, Lombriz ácida, Manguitos",
   "Cacahuates: Japonés, Enchilado",
   "Extras: Banderillas",
   "Frituras: Papas, Churros sal y chile, Totis",
   "",
-  "Extras: Vasos personalizados (tema: Rosa y dorado) — por confirmar",
+  "Extras: Vasos personalizados — sin costo",
   "------------------------------",
-  "*TOTAL: $2,800 + extras por confirmar*"
+  "*TOTAL: $2,800*"
 ].join("\n");
 
 /* ############################################################################
@@ -1094,7 +1096,7 @@ function leerCotizacion(texto){
     else if (/^(hora|hora del evento|hora de inicio|horario)$/.test(clave)) { const h = leerHora(valor); if (h) r.datos.hora = h; }
     else if (/^(lugar|direccion|lugar del evento|domicilio|salon)$/.test(clave)) { if (!/por definir/.test(norm(valor))) r.datos.direccion = valor.slice(0, LIM.direccion); }
     else if (/^(invitados|personas|numero de invitados|numero de personas)$/.test(clave)) { const i = /(\d{1,4})/.exec(valor); if (i) r.datos.invitados = Math.max(REGLAS.minInvitados, +i[1]); }
-    else if (/^notas?$/.test(clave)) { r.datos.notas = valor.slice(0, LIM.notas); }
+    else if (/^(notas?|observaciones?)$/.test(clave)) { r.datos.notas = valor.slice(0, LIM.notas); }
     else if (/^(total|anticipo)/.test(clave)) { /* se recalcula, no se lee */ }
     else if (clave === "extras" && (/[—$]|--| - |vaso|tiempo adicional|hora/i.test(valor))) {
       valor.split(/;/).forEach(parte => {
