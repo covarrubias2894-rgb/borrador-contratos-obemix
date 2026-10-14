@@ -885,7 +885,10 @@ function calcular(k){
   const horas = REGLAS.horasIncluidas + horasExtra;
   const inicio = fechaHora(ev.fecha, ev.hora);
   const termino = inicio ? new Date(inicio.getTime() + horas * 3600e3) : null;
-  const limite = inicio ? new Date(inicio.getTime() - REGLAS.liquidarHorasAntes * 3600e3) : null;
+  const dFecha = inicio ? null : fechaDe(ev.fecha);                       // sin hora de inicio: se cuenta por día
+  const limite = inicio ? new Date(inicio.getTime() - REGLAS.liquidarHorasAntes * 3600e3)
+               : dFecha ? new Date(dFecha.getTime() - REGLAS.liquidarHorasAntes * 3600e3) : null;
+  const limiteSinHora = !inicio && !!limite;
   const tipo = ev.tipo === "Otro" ? (ev.tipoOtro.trim() || "Otro") : ev.tipo;
   const contacto = [ev.contactoNombre.trim(), digitos(ev.contactoTel) ? telCorto(ev.contactoTel) : ""].filter(Boolean).join(" · ");
 
@@ -895,11 +898,11 @@ function calcular(k){
     snacks, grupos, nSnacks: snacks.length, faltanSnacks: Math.max(0, REGLAS.productosPorBarra - snacks.length),
     extras, extrasSuma, extrasSinMonto, subtotal, ajustado, ajusteNota: String(k.ajuste.nota || "").trim(),
     total, anticipo, saldo,
-    horas, horasExtra, inicio, termino, limite,
+    horas, horasExtra, inicio, termino, limite, limiteSinHora,
     fechaTxt: fechaLarga(ev.fecha),
     horaInicioTxt: inicio ? horaTxt(inicio) : "",
     horarioTxt: inicio ? horaTxt(inicio) + " a " + horaTxt(termino) : "",
-    limiteTxt: limite ? fechaLarga(isoDe(limite)) + ", " + horaTxt(limite) : "",
+    limiteTxt: limite ? fechaLarga(isoDe(limite)) + (limiteSinHora ? "" : ", " + horaTxt(limite)) : "",
     pagado: !!k.pago.pagado, fechaPagoTxt: fechaCorta(k.pago.fecha),
     cliente: k.cliente.nombre.trim(), telefonoTxt: digitos(k.cliente.telefono) ? telCorto(k.cliente.telefono) : "", telWa: limpiarTel(k.cliente.telefono),
     festejado: k.cliente.festejado.trim(), tipo, contacto,
@@ -915,7 +918,6 @@ function faltantes(k, c){
   if (!tel) add("cliente", "cliente.telefono", "teléfono");
   else if (tel.length < 10) add("cliente", "cliente.telefono", "teléfono completo (10 dígitos)");
   if (!k.evento.fecha) add("evento", "evento.fecha", "fecha del evento");
-  if (!k.evento.hora) add("evento", "evento.hora", "hora de inicio");
   if (!k.evento.direccion.trim()) add("evento", "evento.direccion", "dirección del evento");
   if (!c.invitados) add("evento", "evento.invitados", "número de invitados");
   if (c.especial && c.precioPaquete == null) add("servicio", "precioEspecial", "precio especial del paquete");
@@ -1148,7 +1150,7 @@ function porRevisar(k){
   if (!digitos(k.cliente.telefono)) l.push("teléfono");
   if (!k.evento.fecha) l.push("fecha");
   l.unshift("dirección");
-  if (!k.evento.hora) l.splice(1, 0, "hora de inicio");
+  if (!k.evento.hora) l.splice(1, 0, "hora de inicio (opcional)");
   if (!c.invitados) l.push("invitados");
   if (c.especial) l.push("precio especial");
   c.extrasSinMonto.forEach(e => l.push(e.porHora ? "monto del tiempo adicional" : "monto de los vasos"));
@@ -1403,7 +1405,7 @@ function bloqueDatos(k, c, o, num){
   const campo = (et, val, nuevo, ancha) => ({ et, val: val || "", nuevo: !!nuevo, ancha: !!ancha });
   const filas = [
     [campo(E.nombre, c.cliente), campo(E.telefono, c.telefonoTxt)],
-    [campo(E.fecha, mayuscula(c.fechaTxt)), campo(E.hora, c.horarioTxt)],
+    [campo(E.fecha, mayuscula(c.fechaTxt)), campo(E.hora, c.horarioTxt || "Por acordar")],
     [campo(E.personas, c.invitados ? String(c.invitados) : ""), campo(E.lugar, c.direccion)]
   ];
   if (tipo || c.contacto) filas.push([tipo ? campo(c.tipo ? E.tipo : "FESTEJADO(A)", tipo, true) : null, c.contacto ? campo(E.contacto, c.contacto, true) : null]);
@@ -1493,7 +1495,7 @@ function bloqueHonorarios(k, c, o, num, v){
   const GAPT = 2.65, CWt = (ANCHO - 2 * GAPT) / 3, IW = CWt - 4.2, LHD = 3.75, lh = LH(9.7);
   const cant = n => n == null ? "$ ______ " + TEXTOS.pesos : money(n) + " " + TEXTOS.pesos;
   const vt = { pct: String(REGLAS.anticipoPct), horasAntes: String(REGLAS.liquidarHorasAntes) };
-  const limite = c.limite ? llenar(TEXTOS.limite, { limite: fechaSinAnio(c.limite) + ", " + horaTxt(c.limite) }) : "";
+  const limite = c.limite ? llenar(TEXTOS.limite, { limite: fechaSinAnio(c.limite) + (c.limiteSinHora ? "" : ", " + horaTxt(c.limite)) }) : "";
   const colores = [[COL.t1Fondo, COL.t1Borde, COL.t1Titulo], [COL.t2Fondo, COL.t2Borde, COL.t2Titulo], [COL.t3Fondo, COL.t3Borde, COL.t3Titulo]];
   const tarjetas = TEXTOS.tarjetas.map((tj, i) => {
     const extra = i === 1 && c.pagado && c.fechaPagoTxt ? llenar(TEXTOS.pagado, { fecha: c.fechaPagoTxt }) : i === 2 ? limite : "";
@@ -1845,7 +1847,7 @@ function seccionCompleta(id, c){
   const f = faltantes(K, c).filter(x => x.sec === id);
   if (f.length) return false;
   if (id === "cliente") return !!c.cliente;
-  if (id === "evento") return !!(K.evento.fecha && K.evento.hora && c.direccion && c.invitados);
+  if (id === "evento") return !!(K.evento.fecha && c.direccion && c.invitados);
   if (id === "servicio") return !!c.invitados && c.nSnacks === REGLAS.productosPorBarra;
   if (id === "pagos") return c.total != null;
   return true;
@@ -1865,7 +1867,7 @@ function cuerpo(id){
       return '<div class="campo"><span class="l" id="lTipo">Tipo de evento' + punto("evento.tipo") + '</span><div class="chips" role="group" aria-labelledby="lTipo">' +
           EVENTOS.map(ev => '<button type="button" class="chip" data-a="tipo" data-v="' + esc(ev) + '" data-foco="tipo:' + esc(ev) + '" aria-pressed="' + (K.evento.tipo === ev) + '">' + esc(ev) + "</button>").join("") + "</div></div>" +
         (K.evento.tipo === "Otro" ? inputTxt("evento.tipoOtro", "¿Qué evento es?", { max: 40, ph: "Ej. Graduación" }) : "") +
-        '<div class="dos">' + inputTxt("evento.fecha", "Fecha", { req: true, tipo: "date" }) + inputTxt("evento.hora", "Hora de inicio", { req: true, tipo: "time" }) + "</div>" +
+        '<div class="dos">' + inputTxt("evento.fecha", "Fecha", { req: true, tipo: "date" }) + inputTxt("evento.hora", "Hora de inicio", { nota: "(opcional)", tipo: "time" }) + "</div>" +
         inputTxt("evento.direccion", "Dirección completa del evento", { req: true, area: true, max: LIM.direccion, ph: "Calle, número, colonia, salón o referencia" }) +
         '<div class="dos">' + inputTxt("evento.contactoNombre", "Contacto en el lugar", { nota: "(opcional)", max: LIM.nombre, ph: "Nombre" }) +
           inputTxt("evento.contactoTel", "Teléfono del contacto", { nota: "(opcional)", tipo: "tel", modo: "tel", max: LIM.telefono }) + "</div>" +
@@ -1938,7 +1940,7 @@ function tarjetasHTML(c){
   const m = n => n == null ? "—" : money(n);
   return '<div class="tj tj1"><small>Costo total</small><b class="num">' + m(c.total) + "</b><span>" + esc(c.total == null ? faltaTxt : c.ajustado ? "Total ajustado" : "Acordado") + "</span></div>" +
     '<div class="tj tj2"><small>Anticipo (' + REGLAS.anticipoPct + '%)</small><b class="num">' + m(c.anticipo) + "</b><span" + (c.pagado ? ' class="ok"' : "") + ">" + (c.pagado ? "Pagado el " + esc(c.fechaPagoTxt) : "Al reservar") + "</span></div>" +
-    '<div class="tj tj3"><small>Saldo restante</small><b class="num">' + m(c.saldo) + "</b><span>" + esc(c.limite ? "Límite: " + fechaCorta(isoDe(c.limite)) + " " + horaTxt(c.limite) : REGLAS.liquidarHorasAntes + " h antes del evento") + "</span></div>";
+    '<div class="tj tj3"><small>Saldo restante</small><b class="num">' + m(c.saldo) + "</b><span>" + esc(c.limite ? "Límite: " + fechaCorta(isoDe(c.limite)) + (c.limiteSinHora ? "" : " " + horaTxt(c.limite)) : REGLAS.liquidarHorasAntes + " h antes del evento") + "</span></div>";
 }
 function cuerpoPagos(c){
   let h = '<div class="tarjetas" id="pagosTj" aria-live="polite" aria-atomic="true">' + tarjetasHTML(c) + "</div>";
