@@ -578,9 +578,9 @@ const CLAUSULAS = [
     textoPrecio: " Tiene un costo de {{precioHora}} por hora." },   // solo se imprime si el tiempo adicional tiene precio en EXTRAS
   { id: "retraso", titulo: "Si el evento empieza tarde", donde: "Duración del servicio, segundo párrafo", tipo: "sugerida", activa: true,
     texto: "Si el inicio del evento se retrasa por causas ajenas a OBE! mix, el tiempo de servicio se contará a partir de la hora acordada." },
-  { id: "cambios", titulo: "Cambio de fecha", donde: "Nueva sección “Cambios de fecha y cancelaciones”", tipo: "porConfirmar", activa: false,
+  { id: "cambios", titulo: "Cambio de fecha", donde: "Nueva sección “Cambios de fecha y cancelaciones”", tipo: "porConfirmar", activa: true,   // 8 días: dato de la clienta (14 oct)
     texto: "La fecha del evento puede cambiarse una sola vez, avisando con al menos {{diasCambio}} días de anticipación y sujeto a disponibilidad; el anticipo se respeta para la nueva fecha.", datos: ["diasCambio"] },
-  { id: "cancelacion", titulo: "Cancelación", donde: "Cambios de fecha y cancelaciones", tipo: "porConfirmar", activa: false,
+  { id: "cancelacion", titulo: "Cancelación", donde: "Cambios de fecha y cancelaciones", tipo: "porConfirmar", activa: true,   // 50% con 8 días: dato de la clienta (14 oct)
     variantes: {
       A: { nombre: "A) No se reembolsa", texto: "En caso de cancelación, el anticipo no es reembolsable.", datos: [] },
       B: { nombre: "B) Reembolso parcial", texto: "En caso de cancelación con al menos {{diasCancel}} días de anticipación, se reembolsará el {{pctReembolso}}% del anticipo; con menos tiempo, el anticipo no es reembolsable.", datos: ["diasCancel", "pctReembolso"] }
@@ -664,7 +664,9 @@ let errCl = {};             // avisos en línea al intentar encender una cláusu
 let msgInv = "";
 
 /* ---- ESTADO: estructura del contrato, valores predeterminados y validación de lo guardado ---- */
-function datosVacios(){ const d = {}; Object.keys(DATOS_CLAUSULAS).forEach(k => { d[k] = DATOS_CLAUSULAS[k].tipo === "casilla" ? false : ""; }); return d; }
+/* Datos que la clienta ya dio (14 oct): cambio de fecha con 8 días; cancelación con 8 días = 50% de reembolso */
+const DATOS_BASE = { diasCambio: "8", varianteCancel: "B", diasCancel: "8", pctReembolso: "50" };
+function datosVacios(){ const d = {}; Object.keys(DATOS_CLAUSULAS).forEach(k => { d[k] = DATOS_CLAUSULAS[k].tipo === "casilla" ? false : ""; }); return Object.assign(d, DATOS_BASE); }
 function activasBase(){ const a = {}; CLAUSULAS.forEach(c => { a[c.id] = c.tipo === "original" ? true : !!c.activa; }); return a; }
 /* Datos que le faltan a una cláusula para poder encenderse */
 function datosFaltantes(cl, d){
@@ -678,7 +680,8 @@ function contratoNuevo(folio){
   const extras = {};
   EXTRAS.forEach(x => { extras[x.id] = { cant: 0, monto: "", tema: "", cantidad: "" }; });
   const activas = Object.assign(activasBase(), PRED.activas || {});
-  const datos = Object.assign(datosVacios(), PRED.datos || {});
+  const datos = datosVacios();
+  Object.keys(PRED.datos || {}).forEach(x => { const val = PRED.datos[x]; if (typeof val === "boolean" || String(val || "").trim()) datos[x] = val; });
   CLAUSULAS.forEach(cl => {
     if (cl.tipo === "original") activas[cl.id] = true;
     else if (activas[cl.id] && datosFaltantes(cl, datos).length) activas[cl.id] = false;
@@ -733,6 +736,15 @@ function normalizarContrato(o){
   if (o.clausulas && typeof o.clausulas === "object") CLAUSULAS.forEach(cl => { if (cl.tipo !== "original" && typeof o.clausulas[cl.id] === "boolean") k.clausulas[cl.id] = o.clausulas[cl.id]; });
   if (o.datos && typeof o.datos === "object") Object.keys(DATOS_CLAUSULAS).forEach(d => {
     if (d in o.datos) k.datos[d] = DATOS_CLAUSULAS[d].tipo === "casilla" ? !!o.datos[d] : str(o.datos[d], 160);
+  });
+  /* Contratos guardados antes del 14 oct: si aún no se habían generado y los datos de cambio/cancelación
+     estaban vacíos, toman los que dio la clienta y esas cláusulas se encienden. Los ya generados no cambian. */
+  if (!k.generado) Object.keys(DATOS_BASE).forEach(d => {
+    if (!String(k.datos[d] || "").trim()) {
+      k.datos[d] = DATOS_BASE[d];
+      if (d === "diasCambio") k.clausulas.cambios = true;
+      if (d === "varianteCancel") k.clausulas.cancelacion = true;
+    }
   });
   k.imagenes = o.imagenes !== false;
   const f = o.firma || {};
@@ -1973,10 +1985,10 @@ function campoDato(clave){
     ((d.max || 0) > 60 ? '<textarea class="inp" rows="2"' + attrs + ' style="min-height:72px">' + esc(val) + "</textarea>" : '<input class="inp" type="text"' + attrs + ' value="' + esc(val) + '">') + "</label>";
 }
 function cuerpoClausulas(c){
-  let h = '<p class="leyenda">Original = de su contrato · Sugerida = nueva, encendida · Por confirmar = nueva, se enciende cuando escriba el dato que falta.</p>';
+  let h = '<p class="leyenda">Original = de su contrato · Sugerida = nueva, encendida · Con sus datos = nueva, con los días y porcentajes que usted dio (se pueden cambiar aquí).</p>';
   h += CLAUSULAS.map(cl => {
     const orig = cl.tipo === "original", on = activa(K, cl.id), mal = intento && on && !orig && datosFaltantes(cl, K.datos).length;
-    const etq = { original: "Original", sugerida: "Sugerida", porConfirmar: "Por confirmar" }[cl.tipo];
+    const etq = { original: "Original", sugerida: "Sugerida", porConfirmar: "Con sus datos" }[cl.tipo];
     let x = '<div class="cl' + (orig ? " orig" : on ? " on" : "") + (mal ? " mal" : "") + '" id="cl-' + cl.id + '"><div class="cl-top"><div class="cl-t"><b id="clt-' + cl.id + '">' + esc(cl.titulo) + "</b>" +
       '<span class="etq etq-' + cl.tipo + '">' + etq + '</span><span class="cl-donde">' + esc(cl.donde) + "</span></div>" +
       (orig ? '<span class="candado">' + ic("ic-candado", "") + "Siempre va</span>" : '<span class="sw-wrap"><button type="button" class="sw" role="switch" aria-checked="' + on + '" aria-labelledby="clt-' + cl.id + '" data-a="cl" data-v="' + cl.id + '" data-foco="cl:' + cl.id + '"></button></span>') +
